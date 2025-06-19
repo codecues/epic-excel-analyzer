@@ -3,8 +3,10 @@ import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { EpicData } from "@/pages/Index";
-import { Clock, TrendingUp, CheckCircle } from "lucide-react";
+import { Clock, TrendingUp, CheckCircle, Download } from "lucide-react";
+import * as XLSX from 'xlsx';
 
 interface EpicSummaryProps {
   epicData: EpicData[];
@@ -28,6 +30,26 @@ export const EpicSummary: React.FC<EpicSummaryProps> = ({ epicData }) => {
 
   const totalCapitalizable = epicData.reduce((sum, epic) => sum + epic.capitalizableHours, 0);
   const totalHours = epicData.reduce((sum, epic) => sum + epic.totalHours, 0);
+
+  const exportToExcel = () => {
+    const exportData = epicData.map(epic => ({
+      'Epic Name': epic.epicName,
+      'Total Hours': epic.totalHours.toFixed(2),
+      'Capitalizable Hours': epic.capitalizableHours.toFixed(2),
+      'Number of Entries': epic.entries.length,
+      'Status': epic.capitalizableHours > 0 ? 'Capitalizable' : 'Non-Capitalizable'
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Epic Summary');
+    
+    // Generate filename with current date
+    const date = new Date().toISOString().split('T')[0];
+    const filename = `epic-summary-${date}.xlsx`;
+    
+    XLSX.writeFile(workbook, filename);
+  };
 
   return (
     <div className="space-y-6">
@@ -141,8 +163,16 @@ export const EpicSummary: React.FC<EpicSummaryProps> = ({ epicData }) => {
       {/* Epic Details Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Epic Summary Table</CardTitle>
-          <CardDescription>Detailed breakdown of each epic</CardDescription>
+          <div className="flex justify-between items-center">
+            <div>
+              <CardTitle>Epic Summary Table</CardTitle>
+              <CardDescription>Detailed breakdown of each epic</CardDescription>
+            </div>
+            <Button onClick={exportToExcel} className="flex items-center gap-2">
+              <Download className="h-4 w-4" />
+              Export to Excel
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">

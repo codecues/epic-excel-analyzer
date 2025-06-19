@@ -3,7 +3,6 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileUpload } from "@/components/FileUpload";
 import { EpicSummary } from "@/components/EpicSummary";
-import { DetailedBreakdown } from "@/components/DetailedBreakdown";
 import { OverallSummary } from "@/components/OverallSummary";
 import { BarChart3, FileSpreadsheet, TrendingUp } from "lucide-react";
 
@@ -85,19 +84,6 @@ const Index = () => {
               </CardHeader>
               <CardContent>
                 <EpicSummary epicData={epicData} />
-              </CardContent>
-            </Card>
-
-            {/* Detailed Breakdown */}
-            <Card className="shadow-lg border-0 bg-white/80 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle>Detailed Breakdown</CardTitle>
-                <CardDescription>
-                  Complete timesheet data with all entries
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <DetailedBreakdown data={timesheetData} />
               </CardContent>
             </Card>
           </div>
