@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { parseExcelData } from "@/utils/excelParser";
 import { TimesheetData, EpicData } from "@/pages/Index";
 import { useToast } from "@/hooks/use-toast";
+import * as XLSX from 'xlsx';
 
 interface FileUploadProps {
   onDataProcessed: (data: TimesheetData[], epics: EpicData[], total: number) => void;
@@ -20,34 +21,90 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onDataProcessed }) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    console.log('File selected:', file.name);
+    console.log('File selected:', file.name, 'Size:', file.size);
 
     try {
-      // For demo purposes, we'll parse the sample data
-      // In a real implementation, you'd read the Excel file
-      const sampleData = [
-        { category: "[INSZ-11612] Call Centre History Data Load", timeSpent: 6, capitalizable: "No", epicLink: "INSZ-11612", issue: "[INSZ-11732] Clover Call Center History load" },
-        { category: "[INSZ-11612] Call Centre History Data Load", timeSpent: 2, capitalizable: "No", epicLink: "INSZ-11612", issue: "[INSZ-11732] Clover Call Center History load" },
-        { category: "[INSZ-11612] Call Centre History Data Load", timeSpent: 2, capitalizable: "-", epicLink: "-", issue: "[INSZ-11651] Call center history load - Jan month load" },
-        { category: "[INSZ-11612] Call Centre History Data Load", timeSpent: 4, capitalizable: "-", epicLink: "-", issue: "[INSZ-11746] call center data validation in clover UAT" },
-        { category: "[INSZ-11612] Call Centre History Data Load", timeSpent: 4, capitalizable: "-", epicLink: "-", issue: "[INSZ-11651] Call center history load - Jan month load" },
-        { category: "[INSZ-11612] Call Centre History Data Load", timeSpent: 6, capitalizable: "-", epicLink: "-", issue: "[INSZ-11651] Call center history load - Jan month load" },
-        { category: "[INSZ-11612] Call Centre History Data Load", timeSpent: 4, capitalizable: "-", epicLink: "-", issue: "[INSZ-11746] call center data validation in clover UAT" },
-        { category: "[INSZ-8245] Sprint Ceremonies", timeSpent: 3, capitalizable: "Yes", epicLink: "INSZ-8245", issue: "[INSZ-11865] PO Meeting for Sprint 9" },
-        { category: "[INSZ-8245] Sprint Ceremonies", timeSpent: 1, capitalizable: "-", epicLink: "-", issue: "[INSZ-12030] Insitz Plus-Demo & Retrospective" },
-        { category: "[INSZ-8245] Sprint Ceremonies", timeSpent: 2, capitalizable: "-", epicLink: "-", issue: "[INSZ-12029] Demo and retro" }
-      ];
-
-      const { processedData, epicSummary, totalHours } = parseExcelData(sampleData);
+      const reader = new FileReader();
       
-      console.log('Parsed data:', { processedData, epicSummary, totalHours });
+      reader.onload = (e) => {
+        try {
+          const data = new Uint8Array(e.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
+          
+          // Get the first worksheet
+          const worksheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[worksheetName];
+          
+          // Convert to JSON with header row
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+          
+          console.log('Raw Excel data:', jsonData);
+          
+          // Process the Excel data to extract timesheet entries
+          const processedRows = [];
+          let currentCategory = '';
+          
+          for (let i = 0; i < jsonData.length; i++) {
+            const row = jsonData[i] as any[];
+            
+            // Skip empty rows
+            if (!row || row.length === 0) continue;
+            
+            // Check if this row starts a new category (epic)
+            if (row[0] && typeof row[0] === 'string' && row[0].includes('[') && row[0].includes(']')) {
+              currentCategory = row[0].trim();
+              continue;
+            }
+            
+            // Check if this is a data row (has "Billable" and time data)
+            if (row[0] === 'Billable' && row[1] && !isNaN(parseFloat(row[1]))) {
+              processedRows.push({
+                category: currentCategory,
+                timeSpent: parseFloat(row[1]) || 0,
+                capitalizable: row[2] || '-',
+                epicLink: row[3] || '-',
+                issue: row[4] || ''
+              });
+            }
+          }
+          
+          console.log('Processed rows:', processedRows);
+          
+          if (processedRows.length === 0) {
+            throw new Error('No valid timesheet data found in the file');
+          }
+          
+          const { processedData, epicSummary, totalHours } = parseExcelData(processedRows);
+          
+          console.log('Final parsed data:', { processedData, epicSummary, totalHours });
+          
+          onDataProcessed(processedData, epicSummary, totalHours);
+          
+          toast({
+            title: "File uploaded successfully!",
+            description: `Processed ${processedData.length} entries across ${epicSummary.length} epics. Total: ${totalHours.toFixed(2)} hours.`,
+          });
+        } catch (parseError) {
+          console.error('Error parsing Excel data:', parseError);
+          toast({
+            title: "Error parsing Excel file",
+            description: "Please check that your file follows the expected format.",
+            variant: "destructive",
+          });
+        }
+      };
       
-      onDataProcessed(processedData, epicSummary, totalHours);
+      reader.onerror = () => {
+        console.error('Error reading file');
+        toast({
+          title: "Error reading file",
+          description: "Failed to read the uploaded file.",
+          variant: "destructive",
+        });
+      };
       
-      toast({
-        title: "File uploaded successfully!",
-        description: `Processed ${processedData.length} entries across ${epicSummary.length} epics.`,
-      });
+      reader.readAsArrayBuffer(file);
+      
     } catch (error) {
       console.error('Error processing file:', error);
       toast({
@@ -81,8 +138,8 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onDataProcessed }) => {
       <Alert className="max-w-2xl mx-auto">
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
-          Upload an Excel file (.xlsx, .xls) or CSV file with timesheet data. 
-          The file should contain columns: Category, Time Spent (Hours), Capitalizable, Epic Link, and Issue.
+          Upload an Excel file (.xlsx, .xls) with timesheet data. 
+          The file should contain epic categories followed by billable entries with columns: Type, Time Spent (Hours), Capitalizable, Epic Link, and Issue.
         </AlertDescription>
       </Alert>
     </div>
